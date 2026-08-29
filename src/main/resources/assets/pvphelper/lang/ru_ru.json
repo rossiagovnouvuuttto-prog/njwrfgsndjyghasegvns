@@ -1,0 +1,8 @@
+{
+  "key.pvphelper.menu": "Открыть меню PvP Helper",
+  "key.pvphelper.toggle_aim": "Вкл/выкл Aim Assist",
+  "key.pvphelper.toggle_auto": "Вкл/выкл AutoAttack",
+  "key.pvphelper.toggle_mode": "Сменить режим ударов",
+  "key.pvphelper.toggle_antibot": "Вкл/выкл AntiBot",
+  "category.pvphelper": "PvP Helper"
+}
