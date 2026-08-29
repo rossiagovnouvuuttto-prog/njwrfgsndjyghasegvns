@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "id": "pvphelper",
+  "version": "${version}",
+  "name": "PvP Helper",
+  "description": "Client-side PvP helper for Minecraft 1.16.5 Fabric.",
+  "authors": ["OpenAI + user"],
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "me.pvphelper.client.PvPHelperClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.0",
+    "fabric": "*",
+    "minecraft": "1.16.5"
+  }
+}
