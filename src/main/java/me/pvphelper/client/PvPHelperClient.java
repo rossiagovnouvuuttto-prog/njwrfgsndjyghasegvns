@@ -268,7 +268,9 @@ public final class PvPHelperClient implements ClientModInitializer {
     }
 
     private static void autoAttack(MinecraftClient client, PlayerEntity target) {
-        if (client.player.getAttackCooldownProgress(0.5f) < CONFIG.cooldownThreshold) {
+        float cooldown = client.player.getAttackCooldownProgress(0.5f);
+        float threshold = getAttackThreshold();
+        if (cooldown < threshold) {
             return;
         }
 
@@ -291,6 +293,20 @@ public final class PvPHelperClient implements ClientModInitializer {
         client.interactionManager.attackEntity(client.player, target);
         client.player.swingHand(Hand.MAIN_HAND);
         critJumpTicks = 0;
+    }
+
+    private static float getAttackThreshold() {
+        boolean crit = CONFIG.attackMode == PvPConfig.AttackMode.CRIT;
+
+        if (CONFIG.attackSpeed == PvPConfig.AttackSpeed.FAST) {
+            return crit ? 0.84f : 0.72f;
+        }
+        if (CONFIG.attackSpeed == PvPConfig.AttackSpeed.SAFE) {
+            return crit ? 0.92f : 0.90f;
+        }
+
+        // SMART: attacks before a full indicator while keeping noticeably more damage per hit.
+        return crit ? 0.88f : 0.82f;
     }
 
     private static float getYawTo(PlayerEntity from, PlayerEntity to) {
