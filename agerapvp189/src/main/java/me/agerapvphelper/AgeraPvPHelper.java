@@ -2,11 +2,16 @@ package me.agerapvphelper;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
+import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.item.ItemBlock;
+import net.minecraft.item.ItemStack;
+import net.minecraft.util.BlockPos;
 import net.minecraft.util.ChatComponentText;
 import net.minecraft.util.MathHelper;
-import net.minecraftforge.client.ClientCommandHandler;
+import net.minecraft.util.MovingObjectPosition;
+import net.minecraftforge.client.event.RenderGameOverlayEvent;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -24,7 +29,7 @@ import org.lwjgl.input.Keyboard;
 public final class AgeraPvPHelper {
     public static final String MODID = "agerapvphelper";
     public static final String NAME = "AgeraPvP Helper";
-    public static final String VERSION = "1.0.0";
+    public static final String VERSION = "1.1.0";
 
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final double RANGE = 3.2D;
@@ -34,17 +39,22 @@ public final class AgeraPvPHelper {
 
     private static boolean aimEnabled = true;
     private static boolean autoAttackEnabled = false;
+    private static boolean bridgeAssistEnabled = false;
+    private static boolean bridgeSneakOwned = false;
     private static long lastAttackMs = 0L;
 
     private static KeyBinding aimKey;
     private static KeyBinding autoAttackKey;
+    private static KeyBinding bridgeKey;
 
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         aimKey = new KeyBinding("Toggle Aim Assist", Keyboard.KEY_G, "AgeraPvP Helper");
         autoAttackKey = new KeyBinding("Toggle AutoAttack 10 CPS", Keyboard.KEY_H, "AgeraPvP Helper");
+        bridgeKey = new KeyBinding("Toggle Bridge Assist", Keyboard.KEY_B, "AgeraPvP Helper");
         ClientRegistry.registerKeyBinding(aimKey);
         ClientRegistry.registerKeyBinding(autoAttackKey);
+        ClientRegistry.registerKeyBinding(bridgeKey);
         net.minecraftforge.common.MinecraftForge.EVENT_BUS.register(this);
     }
 
@@ -57,22 +67,70 @@ public final class AgeraPvPHelper {
         handleKeys();
 
         if (mc.thePlayer == null || mc.theWorld == null || mc.playerController == null) {
+            releaseBridgeSneak();
             lastAttackMs = 0L;
             return;
         }
 
-        EntityPlayer target = findTarget(mc.thePlayer);
+        EntityPlayerSP self = mc.thePlayer;
+        boolean bridgingWithBlocks = bridgeAssistEnabled && isHoldingBlock(self);
+
+        if (bridgingWithBlocks) {
+            updateEdgeGuard(self);
+        } else {
+            releaseBridgeSneak();
+        }
+
+        // Do not let Aim/AutoAttack pull the camera or swing while the player is actively bridging.
+        if (bridgingWithBlocks) {
+            return;
+        }
+
+        EntityPlayer target = findTarget(self);
         if (target == null) {
             return;
         }
 
         if (aimEnabled) {
-            aimAt(mc.thePlayer, target);
+            aimAt(self, target);
         }
 
         if (autoAttackEnabled) {
-            autoAttack(mc.thePlayer, target);
+            autoAttack(self, target);
         }
+    }
+
+    @SubscribeEvent
+    public void onRenderOverlay(RenderGameOverlayEvent.Post event) {
+        if (event.type != RenderGameOverlayEvent.ElementType.ALL || mc.thePlayer == null) {
+            return;
+        }
+
+        if (!bridgeAssistEnabled) {
+            return;
+        }
+
+        ScaledResolution resolution = new ScaledResolution(mc);
+        String status;
+        int color;
+
+        if (!isHoldingBlock(mc.thePlayer)) {
+            status = "BRIDGE: HOLD BLOCKS";
+            color = 0xAAAAAA;
+        } else if (canPlaceAtCrosshair()) {
+            status = "PLACE NOW";
+            color = 0x55FF55;
+        } else if (isNearEdge(mc.thePlayer)) {
+            status = "EDGE GUARD";
+            color = 0xFFFF55;
+        } else {
+            status = "BRIDGE READY";
+            color = 0x55FFFF;
+        }
+
+        int x = resolution.getScaledWidth() / 2 - mc.fontRendererObj.getStringWidth(status) / 2;
+        int y = resolution.getScaledHeight() / 2 + 28;
+        mc.fontRendererObj.drawStringWithShadow(status, x, y, color);
     }
 
     private static void handleKeys() {
@@ -85,6 +143,82 @@ public final class AgeraPvPHelper {
             autoAttackEnabled = !autoAttackEnabled;
             notifyPlayer("AutoAttack 10 CPS: " + (autoAttackEnabled ? "ON" : "OFF"));
         }
+
+        while (bridgeKey != null && bridgeKey.isPressed()) {
+            bridgeAssistEnabled = !bridgeAssistEnabled;
+            if (!bridgeAssistEnabled) {
+                releaseBridgeSneak();
+            }
+            notifyPlayer("Bridge Assist: " + (bridgeAssistEnabled ? "ON" : "OFF"));
+        }
+    }
+
+    private static boolean isHoldingBlock(EntityPlayerSP player) {
+        ItemStack stack = player.getHeldItem();
+        return stack != null && stack.stackSize > 0 && stack.getItem() instanceof ItemBlock;
+    }
+
+    private static void updateEdgeGuard(EntityPlayerSP player) {
+        if (!player.onGround || !isNearEdge(player)) {
+            releaseBridgeSneak();
+            return;
+        }
+
+        int sneakCode = mc.gameSettings.keyBindSneak.getKeyCode();
+        boolean physicallySneaking = isPhysicalKeyDown(sneakCode);
+        if (!physicallySneaking) {
+            KeyBinding.setKeyBindState(sneakCode, true);
+            bridgeSneakOwned = true;
+        }
+    }
+
+    private static void releaseBridgeSneak() {
+        if (!bridgeSneakOwned || mc.gameSettings == null) {
+            return;
+        }
+
+        int sneakCode = mc.gameSettings.keyBindSneak.getKeyCode();
+        KeyBinding.setKeyBindState(sneakCode, isPhysicalKeyDown(sneakCode));
+        bridgeSneakOwned = false;
+    }
+
+    private static boolean isPhysicalKeyDown(int keyCode) {
+        return keyCode > 0 && Keyboard.isKeyDown(keyCode);
+    }
+
+    private static boolean isNearEdge(EntityPlayerSP player) {
+        if (mc.theWorld == null || player.movementInput == null) {
+            return false;
+        }
+
+        float forward = player.movementInput.moveForward;
+        float strafe = player.movementInput.moveStrafe;
+        double length = Math.sqrt(forward * forward + strafe * strafe);
+        if (length < 0.05D) {
+            return false;
+        }
+
+        forward /= length;
+        strafe /= length;
+
+        double yaw = Math.toRadians(player.rotationYaw);
+        double dirX = (-Math.sin(yaw) * forward) + (Math.cos(yaw) * strafe);
+        double dirZ = ( Math.cos(yaw) * forward) + (Math.sin(yaw) * strafe);
+
+        double feetY = player.getEntityBoundingBox().minY - 0.08D;
+        BlockPos currentBelow = new BlockPos(player.posX, feetY, player.posZ);
+        BlockPos aheadBelow = new BlockPos(
+                player.posX + dirX * 0.62D,
+                feetY,
+                player.posZ + dirZ * 0.62D
+        );
+
+        return mc.theWorld.isAirBlock(currentBelow) || mc.theWorld.isAirBlock(aheadBelow);
+    }
+
+    private static boolean canPlaceAtCrosshair() {
+        MovingObjectPosition hit = mc.objectMouseOver;
+        return hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
     }
 
     private static EntityPlayer findTarget(EntityPlayerSP self) {
