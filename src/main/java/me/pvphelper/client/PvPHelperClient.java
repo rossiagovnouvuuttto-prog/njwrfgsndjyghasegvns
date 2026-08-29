@@ -69,6 +69,7 @@ public final class PvPHelperClient implements ClientModInitializer {
 
         updateSeenPlayers(client);
 
+        // Pause combat helpers while eating. They resume automatically afterwards.
         if (isEatingFood(client)) {
             critJumpTicks = 0;
             return;
@@ -190,12 +191,13 @@ public final class PvPHelperClient implements ClientModInitializer {
     }
 
     private static boolean isBot(MinecraftClient client, AbstractClientPlayerEntity candidate) {
-        if (!isInTabList(client, candidate)) {
+        PlayerListEntry entry = getTabEntry(client, candidate);
+        if (entry == null) {
             return true;
         }
 
         Integer ticks = seenTicks.get(candidate.getUuid());
-        if (ticks == null || ticks < 20) {
+        if (ticks == null || ticks < 10) {
             return true;
         }
 
@@ -209,10 +211,13 @@ public final class PvPHelperClient implements ClientModInitializer {
             return true;
         }
 
-        return isReallyWorldArmorBot(candidate);
+        // ReallyWorld heuristic: armor alone NEVER makes a real player a bot.
+        // Only treat the armor pattern as suspicious when the entity has just appeared
+        // and TAB reports zero latency, which is much closer to an anti-cheat decoy.
+        return ticks < 60 && entry.getLatency() <= 0 && hasReallyWorldBotArmor(candidate);
     }
 
-    private static boolean isReallyWorldArmorBot(PlayerEntity candidate) {
+    private static boolean hasReallyWorldBotArmor(PlayerEntity candidate) {
         ItemStack helmet = candidate.inventory.getArmorStack(3);
         ItemStack chest = candidate.inventory.getArmorStack(2);
         ItemStack legs = candidate.inventory.getArmorStack(1);
@@ -239,12 +244,15 @@ public final class PvPHelperClient implements ClientModInitializer {
         return !stack.isEmpty() && stack.getItem() == expectedItem && !stack.hasEnchantments();
     }
 
-    private static boolean isInTabList(MinecraftClient client, AbstractClientPlayerEntity candidate) {
+    private static PlayerListEntry getTabEntry(MinecraftClient client, AbstractClientPlayerEntity candidate) {
         if (client.getNetworkHandler() == null) {
-            return false;
+            return null;
         }
-        PlayerListEntry entry = client.getNetworkHandler().getPlayerListEntry(candidate.getUuid());
-        return entry != null;
+        return client.getNetworkHandler().getPlayerListEntry(candidate.getUuid());
+    }
+
+    private static boolean isInTabList(MinecraftClient client, AbstractClientPlayerEntity candidate) {
+        return getTabEntry(client, candidate) != null;
     }
 
     private static void aimAt(MinecraftClient client, PlayerEntity target) {
