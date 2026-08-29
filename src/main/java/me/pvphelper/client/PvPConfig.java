@@ -17,9 +17,12 @@ public final class PvPConfig {
     public boolean ignoreInvisible = true;
 
     public AttackMode attackMode = AttackMode.NORMAL;
+    public AttackSpeed attackSpeed = AttackSpeed.SMART;
     public double range = 3.2;
     public double aimFov = 90.0;
     public double aimStrength = 0.22;
+
+    // Kept only for backward compatibility with old config files.
     public float cooldownThreshold = 0.92f;
 
     private final Path path = FabricLoader.getInstance().getConfigDir().resolve("pvphelper.properties");
@@ -27,6 +30,12 @@ public final class PvPConfig {
     public enum AttackMode {
         NORMAL,
         CRIT
+    }
+
+    public enum AttackSpeed {
+        SAFE,
+        SMART,
+        FAST
     }
 
     public void load() {
@@ -47,10 +56,17 @@ public final class PvPConfig {
             aimFov = clamp(num(p, "aimFov", aimFov), 20.0, 180.0);
             aimStrength = clamp(num(p, "aimStrength", aimStrength), 0.05, 1.0);
             cooldownThreshold = (float) clamp(num(p, "cooldownThreshold", cooldownThreshold), 0.1, 1.0);
+
             try {
                 attackMode = AttackMode.valueOf(p.getProperty("attackMode", attackMode.name()));
             } catch (IllegalArgumentException ignored) {
                 attackMode = AttackMode.NORMAL;
+            }
+
+            try {
+                attackSpeed = AttackSpeed.valueOf(p.getProperty("attackSpeed", attackSpeed.name()));
+            } catch (IllegalArgumentException ignored) {
+                attackSpeed = AttackSpeed.SMART;
             }
         } catch (IOException ignored) {
         }
@@ -64,6 +80,7 @@ public final class PvPConfig {
         p.setProperty("aimOnlyWhileAttacking", Boolean.toString(aimOnlyWhileAttacking));
         p.setProperty("ignoreInvisible", Boolean.toString(ignoreInvisible));
         p.setProperty("attackMode", attackMode.name());
+        p.setProperty("attackSpeed", attackSpeed.name());
         p.setProperty("range", Double.toString(range));
         p.setProperty("aimFov", Double.toString(aimFov));
         p.setProperty("aimStrength", Double.toString(aimStrength));
