@@ -30,7 +30,7 @@ import org.lwjgl.input.Keyboard;
 public final class AgeraPvPHelper {
     public static final String MODID = "agerapvphelper";
     public static final String NAME = "AgeraPvP Helper";
-    public static final String VERSION = "1.1.1";
+    public static final String VERSION = "1.1.2";
 
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final double RANGE = 3.2D;
@@ -67,43 +67,52 @@ public final class AgeraPvPHelper {
 
         handleKeys();
 
-        if (mc.thePlayer == null || mc.theWorld == null || mc.playerController == null) {
+        if (mc.thePlayer == null || mc.theWorld == null || mc.playerController == null || mc.gameSettings == null) {
             releaseBridgeSneak();
             lastAttackMs = 0L;
             return;
         }
 
         EntityPlayerSP self = mc.thePlayer;
-        boolean attackHeld = mc.gameSettings.keyBindAttack.isKeyDown();
+        EntityPlayer crosshairTarget = getCrosshairTarget(self);
+
+        // Desktop launchers usually keep this true while LMB is held.
+        // Some Android/Pojav/FCL controls do not, so crosshairTarget is also treated as combat activity.
+        boolean attackKeyDown = mc.gameSettings.keyBindAttack.isKeyDown();
+        boolean combatActive = attackKeyDown || crosshairTarget != null;
         boolean bridgingWithBlocks = bridgeAssistEnabled && isHoldingBlock(self);
 
-        if (bridgingWithBlocks && !attackHeld) {
+        if (bridgingWithBlocks && !combatActive) {
             updateEdgeGuard(self);
         } else {
             releaseBridgeSneak();
         }
 
-        // While actually bridging, combat helpers stay out of the way.
-        // Holding LMB always gives combat priority, even if Bridge Assist is ON and a block is held.
-        if (bridgingWithBlocks && !attackHeld) {
+        if (bridgingWithBlocks && !combatActive) {
             lastAttackMs = 0L;
             return;
         }
 
-        EntityPlayer target = getCombatTarget(self);
+        EntityPlayer target = crosshairTarget;
+        if (target == null && attackKeyDown) {
+            target = findTarget(self);
+        }
+
         if (target == null) {
             lastAttackMs = 0L;
             return;
         }
 
-        if (aimEnabled && attackHeld) {
+        if (aimEnabled && combatActive) {
             aimAt(self, target);
         }
 
-        // v1.1.1: AutoAttack is hold-to-attack. H enables it, then holding LMB produces up to 10 CPS.
-        if (autoAttackEnabled && attackHeld) {
+        // v1.1.2 mobile fix:
+        // H enables AutoAttack. If the crosshair is on a valid player, attacks run at up to 10 CPS
+        // even when Android touch controls do not report keyBindAttack as held.
+        if (autoAttackEnabled && (crosshairTarget != null || attackKeyDown)) {
             autoAttack(self, target);
-        } else if (!attackHeld) {
+        } else {
             lastAttackMs = 0L;
         }
     }
@@ -114,18 +123,26 @@ public final class AgeraPvPHelper {
             return;
         }
 
+        ScaledResolution resolution = new ScaledResolution(mc);
+
+        if (autoAttackEnabled) {
+            String autoStatus = "AUTO 10 CPS: ON";
+            int ax = resolution.getScaledWidth() / 2 - mc.fontRendererObj.getStringWidth(autoStatus) / 2;
+            int ay = resolution.getScaledHeight() / 2 + 16;
+            mc.fontRendererObj.drawStringWithShadow(autoStatus, ax, ay, 0x55FF55);
+        }
+
         if (!bridgeAssistEnabled) {
             return;
         }
 
-        ScaledResolution resolution = new ScaledResolution(mc);
         String status;
         int color;
 
         if (!isHoldingBlock(mc.thePlayer)) {
             status = "BRIDGE: HOLD BLOCKS";
             color = 0xAAAAAA;
-        } else if (mc.gameSettings.keyBindAttack.isKeyDown()) {
+        } else if (getCrosshairTarget(mc.thePlayer) != null || mc.gameSettings.keyBindAttack.isKeyDown()) {
             status = "COMBAT PRIORITY";
             color = 0xFFAA55;
         } else if (canPlaceAtCrosshair()) {
@@ -153,7 +170,7 @@ public final class AgeraPvPHelper {
         while (autoAttackKey != null && autoAttackKey.isPressed()) {
             autoAttackEnabled = !autoAttackEnabled;
             lastAttackMs = 0L;
-            notifyPlayer("AutoAttack 10 CPS: " + (autoAttackEnabled ? "ON - HOLD LMB" : "OFF"));
+            notifyPlayer("AutoAttack 10 CPS: " + (autoAttackEnabled ? "ON - AIM AT PLAYER" : "OFF"));
         }
 
         while (bridgeKey != null && bridgeKey.isPressed()) {
@@ -233,18 +250,19 @@ public final class AgeraPvPHelper {
         return hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
     }
 
-    private static EntityPlayer getCombatTarget(EntityPlayerSP self) {
+    private static EntityPlayer getCrosshairTarget(EntityPlayerSP self) {
         MovingObjectPosition hit = mc.objectMouseOver;
-        if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY) {
-            Entity entity = hit.entityHit;
-            if (entity instanceof EntityPlayer) {
-                EntityPlayer player = (EntityPlayer) entity;
-                if (isValidTarget(self, player) && self.getDistanceToEntity(player) <= RANGE) {
-                    return player;
-                }
-            }
+        if (hit == null || hit.typeOfHit != MovingObjectPosition.MovingObjectType.ENTITY) {
+            return null;
         }
-        return findTarget(self);
+
+        Entity entity = hit.entityHit;
+        if (!(entity instanceof EntityPlayer)) {
+            return null;
+        }
+
+        EntityPlayer player = (EntityPlayer) entity;
+        return isValidTarget(self, player) && self.getDistanceToEntity(player) <= RANGE ? player : null;
     }
 
     private static boolean isValidTarget(EntityPlayerSP self, EntityPlayer candidate) {
