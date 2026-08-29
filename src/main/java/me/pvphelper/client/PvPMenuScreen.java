@@ -9,7 +9,7 @@ import net.minecraft.text.Text;
 import java.util.Locale;
 
 public final class PvPMenuScreen extends Screen {
-    private static final Text TITLE = new LiteralText("PvP Helper 1.16.5 v1.1");
+    private static final Text TITLE = new LiteralText("PvP Helper 1.16.5 v1.3");
 
     public PvPMenuScreen() {
         super(TITLE);
@@ -20,8 +20,8 @@ public final class PvPMenuScreen extends Screen {
         int w = 220;
         int h = 20;
         int x = this.width / 2 - w / 2;
-        int y = 36;
-        int gap = 22;
+        int y = 28;
+        int gap = 21;
 
         addButton(new ButtonWidget(x, y, w, h, textAim(), b -> {
             PvPHelperClient.CONFIG.aimAssist = !PvPHelperClient.CONFIG.aimAssist;
@@ -33,6 +33,21 @@ public final class PvPMenuScreen extends Screen {
         addButton(new ButtonWidget(x, y, w, h, textAuto(), b -> {
             PvPHelperClient.CONFIG.autoAttack = !PvPHelperClient.CONFIG.autoAttack;
             b.setMessage(textAuto());
+            save();
+        }));
+
+        y += gap;
+        addButton(new ButtonWidget(x, y, w, h, textAttackSpeed(), b -> {
+            PvPConfig.AttackSpeed speed = PvPHelperClient.CONFIG.attackSpeed;
+            if (speed == PvPConfig.AttackSpeed.SMART) {
+                speed = PvPConfig.AttackSpeed.FAST;
+            } else if (speed == PvPConfig.AttackSpeed.FAST) {
+                speed = PvPConfig.AttackSpeed.SAFE;
+            } else {
+                speed = PvPConfig.AttackSpeed.SMART;
+            }
+            PvPHelperClient.CONFIG.attackSpeed = speed;
+            b.setMessage(textAttackSpeed());
             save();
         }));
 
@@ -104,9 +119,9 @@ public final class PvPMenuScreen extends Screen {
     @Override
     public void render(MatrixStack matrices, int mouseX, int mouseY, float delta) {
         renderBackground(matrices);
-        drawCenteredText(matrices, textRenderer, TITLE, width / 2, 8, 0xFFFFFF);
+        drawCenteredText(matrices, textRenderer, TITLE, width / 2, 7, 0xFFFFFF);
         drawCenteredText(matrices, textRenderer,
-                new LiteralText("RShift меню | G Aim | H Auto | J Mode | B AntiBot"), width / 2, 20, 0xA0A0A0);
+                new LiteralText("RShift меню | G Aim | H Auto | J Mode | B AntiBot"), width / 2, 18, 0xA0A0A0);
         super.render(matrices, mouseX, mouseY, delta);
     }
 
@@ -129,6 +144,18 @@ public final class PvPMenuScreen extends Screen {
 
     private static Text textAuto() {
         return new LiteralText("Авто-удары: " + onOff(PvPHelperClient.CONFIG.autoAttack));
+    }
+
+    private static Text textAttackSpeed() {
+        String value;
+        if (PvPHelperClient.CONFIG.attackSpeed == PvPConfig.AttackSpeed.FAST) {
+            value = "FAST";
+        } else if (PvPHelperClient.CONFIG.attackSpeed == PvPConfig.AttackSpeed.SAFE) {
+            value = "SAFE";
+        } else {
+            value = "SMART";
+        }
+        return new LiteralText("Скорость AutoAttack: " + value);
     }
 
     private static Text textAntiBot() {
