@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.entity.EntityPlayerSP;
 import net.minecraft.client.gui.ScaledResolution;
 import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.entity.Entity;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
@@ -29,13 +30,13 @@ import org.lwjgl.input.Keyboard;
 public final class AgeraPvPHelper {
     public static final String MODID = "agerapvphelper";
     public static final String NAME = "AgeraPvP Helper";
-    public static final String VERSION = "1.1.0";
+    public static final String VERSION = "1.1.1";
 
     private static final Minecraft mc = Minecraft.getMinecraft();
     private static final double RANGE = 3.2D;
     private static final float FOV = 90.0F;
     private static final float AIM_STRENGTH = 0.28F;
-    private static final long ATTACK_DELAY_MS = 100L; // 10 CPS
+    private static final long ATTACK_DELAY_MS = 100L; // max 10 CPS
 
     private static boolean aimEnabled = true;
     private static boolean autoAttackEnabled = false;
@@ -73,30 +74,37 @@ public final class AgeraPvPHelper {
         }
 
         EntityPlayerSP self = mc.thePlayer;
+        boolean attackHeld = mc.gameSettings.keyBindAttack.isKeyDown();
         boolean bridgingWithBlocks = bridgeAssistEnabled && isHoldingBlock(self);
 
-        if (bridgingWithBlocks) {
+        if (bridgingWithBlocks && !attackHeld) {
             updateEdgeGuard(self);
         } else {
             releaseBridgeSneak();
         }
 
-        // Do not let Aim/AutoAttack pull the camera or swing while the player is actively bridging.
-        if (bridgingWithBlocks) {
+        // While actually bridging, combat helpers stay out of the way.
+        // Holding LMB always gives combat priority, even if Bridge Assist is ON and a block is held.
+        if (bridgingWithBlocks && !attackHeld) {
+            lastAttackMs = 0L;
             return;
         }
 
-        EntityPlayer target = findTarget(self);
+        EntityPlayer target = getCombatTarget(self);
         if (target == null) {
+            lastAttackMs = 0L;
             return;
         }
 
-        if (aimEnabled) {
+        if (aimEnabled && attackHeld) {
             aimAt(self, target);
         }
 
-        if (autoAttackEnabled) {
+        // v1.1.1: AutoAttack is hold-to-attack. H enables it, then holding LMB produces up to 10 CPS.
+        if (autoAttackEnabled && attackHeld) {
             autoAttack(self, target);
+        } else if (!attackHeld) {
+            lastAttackMs = 0L;
         }
     }
 
@@ -117,6 +125,9 @@ public final class AgeraPvPHelper {
         if (!isHoldingBlock(mc.thePlayer)) {
             status = "BRIDGE: HOLD BLOCKS";
             color = 0xAAAAAA;
+        } else if (mc.gameSettings.keyBindAttack.isKeyDown()) {
+            status = "COMBAT PRIORITY";
+            color = 0xFFAA55;
         } else if (canPlaceAtCrosshair()) {
             status = "PLACE NOW";
             color = 0x55FF55;
@@ -141,7 +152,8 @@ public final class AgeraPvPHelper {
 
         while (autoAttackKey != null && autoAttackKey.isPressed()) {
             autoAttackEnabled = !autoAttackEnabled;
-            notifyPlayer("AutoAttack 10 CPS: " + (autoAttackEnabled ? "ON" : "OFF"));
+            lastAttackMs = 0L;
+            notifyPlayer("AutoAttack 10 CPS: " + (autoAttackEnabled ? "ON - HOLD LMB" : "OFF"));
         }
 
         while (bridgeKey != null && bridgeKey.isPressed()) {
@@ -221,6 +233,28 @@ public final class AgeraPvPHelper {
         return hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.BLOCK;
     }
 
+    private static EntityPlayer getCombatTarget(EntityPlayerSP self) {
+        MovingObjectPosition hit = mc.objectMouseOver;
+        if (hit != null && hit.typeOfHit == MovingObjectPosition.MovingObjectType.ENTITY) {
+            Entity entity = hit.entityHit;
+            if (entity instanceof EntityPlayer) {
+                EntityPlayer player = (EntityPlayer) entity;
+                if (isValidTarget(self, player) && self.getDistanceToEntity(player) <= RANGE) {
+                    return player;
+                }
+            }
+        }
+        return findTarget(self);
+    }
+
+    private static boolean isValidTarget(EntityPlayerSP self, EntityPlayer candidate) {
+        return candidate != self
+                && !candidate.isDead
+                && candidate.getHealth() > 0.0F
+                && !candidate.isInvisible()
+                && self.canEntityBeSeen(candidate);
+    }
+
     private static EntityPlayer findTarget(EntityPlayerSP self) {
         EntityPlayer best = null;
         double bestDistance = RANGE;
@@ -231,13 +265,7 @@ public final class AgeraPvPHelper {
             }
 
             EntityPlayer candidate = (EntityPlayer) obj;
-            if (candidate == self || candidate.isDead || candidate.getHealth() <= 0.0F) {
-                continue;
-            }
-            if (candidate.isInvisible()) {
-                continue;
-            }
-            if (!self.canEntityBeSeen(candidate)) {
+            if (!isValidTarget(self, candidate)) {
                 continue;
             }
 
@@ -280,7 +308,7 @@ public final class AgeraPvPHelper {
             return;
         }
 
-        if (self.getDistanceToEntity(target) > RANGE || !self.canEntityBeSeen(target)) {
+        if (!isValidTarget(self, target) || self.getDistanceToEntity(target) > RANGE) {
             return;
         }
 
