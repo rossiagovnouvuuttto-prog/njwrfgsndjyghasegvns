@@ -69,8 +69,6 @@ public final class PvPHelperClient implements ClientModInitializer {
 
         updateSeenPlayers(client);
 
-        // Do not rotate or attack while the player is actively eating any food.
-        // The configured states stay enabled and resume automatically after eating finishes.
         if (isEatingFood(client)) {
             critJumpTicks = 0;
             return;
@@ -192,7 +190,6 @@ public final class PvPHelperClient implements ClientModInitializer {
     }
 
     private static boolean isBot(MinecraftClient client, AbstractClientPlayerEntity candidate) {
-        // Basic anti-NPC checks.
         if (!isInTabList(client, candidate)) {
             return true;
         }
@@ -212,16 +209,14 @@ public final class PvPHelperClient implements ClientModInitializer {
             return true;
         }
 
-        // ReallyWorld-specific heuristic. RW anti-cheat decoy players are commonly
-        // spawned with characteristic unenchanted leather/iron armor pieces.
         return isReallyWorldArmorBot(candidate);
     }
 
     private static boolean isReallyWorldArmorBot(PlayerEntity candidate) {
-        ItemStack helmet = candidate.getInventory().getArmorStack(3);
-        ItemStack chest = candidate.getInventory().getArmorStack(2);
-        ItemStack legs = candidate.getInventory().getArmorStack(1);
-        ItemStack boots = candidate.getInventory().getArmorStack(0);
+        ItemStack helmet = candidate.inventory.getArmorStack(3);
+        ItemStack chest = candidate.inventory.getArmorStack(2);
+        ItemStack legs = candidate.inventory.getArmorStack(1);
+        ItemStack boots = candidate.inventory.getArmorStack(0);
 
         return isPlainLeather(helmet, Items.LEATHER_HELMET)
                 || isPlainLeather(chest, Items.LEATHER_CHESTPLATE)
