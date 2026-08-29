@@ -33,5 +33,5 @@ jobs:
       - name: Upload mod jar
         uses: actions/upload-artifact@v4
         with:
-          name: AgeraPvPHelper-1.8.9-Forge-1.0.0
+          name: AgeraPvPHelper-1.8.9-Forge-1.1.0
           path: agerapvp189/build/libs/*.jar
