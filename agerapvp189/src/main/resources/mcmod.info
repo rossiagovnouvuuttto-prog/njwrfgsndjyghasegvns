@@ -1,0 +1,16 @@
+[
+  {
+    "modid": "agerapvphelper",
+    "name": "AgeraPvP Helper",
+    "description": "Minecraft 1.8.9 Forge client mod with Aim Assist and 10 CPS AutoAttack.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "",
+    "updateUrl": "",
+    "authorList": ["OpenAI + user"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]
