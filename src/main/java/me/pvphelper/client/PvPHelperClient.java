@@ -9,6 +9,10 @@ import net.minecraft.client.network.PlayerListEntry;
 import net.minecraft.client.option.KeyBinding;
 import net.minecraft.client.util.InputUtil;
 import net.minecraft.entity.player.PlayerEntity;
+import net.minecraft.item.DyeableItem;
+import net.minecraft.item.Item;
+import net.minecraft.item.ItemStack;
+import net.minecraft.item.Items;
 import net.minecraft.text.LiteralText;
 import net.minecraft.util.Hand;
 import net.minecraft.util.math.MathHelper;
@@ -65,6 +69,13 @@ public final class PvPHelperClient implements ClientModInitializer {
 
         updateSeenPlayers(client);
 
+        // Do not rotate or attack while the player is actively eating any food.
+        // The configured states stay enabled and resume automatically after eating finishes.
+        if (isEatingFood(client)) {
+            critJumpTicks = 0;
+            return;
+        }
+
         PlayerEntity target = findTarget(client);
         if (target == null) {
             critJumpTicks = 0;
@@ -78,6 +89,13 @@ public final class PvPHelperClient implements ClientModInitializer {
         if (CONFIG.autoAttack) {
             autoAttack(client, target);
         }
+    }
+
+    private static boolean isEatingFood(MinecraftClient client) {
+        ItemStack active = client.player.getActiveItem();
+        return client.player.isUsingItem()
+                && !active.isEmpty()
+                && active.getItem().isFood();
     }
 
     private static void handleKeys(MinecraftClient client) {
@@ -132,7 +150,7 @@ public final class PvPHelperClient implements ClientModInitializer {
 
             if (isInTabList(client, player)) {
                 int ticks = seenTicks.containsKey(uuid) ? seenTicks.get(uuid) : 0;
-                seenTicks.put(uuid, Math.min(200, ticks + 1));
+                seenTicks.put(uuid, Math.min(400, ticks + 1));
             } else {
                 seenTicks.remove(uuid);
             }
@@ -174,6 +192,7 @@ public final class PvPHelperClient implements ClientModInitializer {
     }
 
     private static boolean isBot(MinecraftClient client, AbstractClientPlayerEntity candidate) {
+        // Basic anti-NPC checks.
         if (!isInTabList(client, candidate)) {
             return true;
         }
@@ -184,12 +203,45 @@ public final class PvPHelperClient implements ClientModInitializer {
         }
 
         String name = candidate.getGameProfile().getName();
-        if (name == null || name.trim().isEmpty()) {
+        if (name == null || !name.matches("[A-Za-z0-9_]{3,16}")) {
             return true;
         }
 
         String lower = name.toLowerCase();
-        return lower.contains("[npc]") || lower.startsWith("npc_") || lower.startsWith("bot_");
+        if (lower.contains("[npc]") || lower.startsWith("npc_") || lower.startsWith("bot_")) {
+            return true;
+        }
+
+        // ReallyWorld-specific heuristic. RW anti-cheat decoy players are commonly
+        // spawned with characteristic unenchanted leather/iron armor pieces.
+        return isReallyWorldArmorBot(candidate);
+    }
+
+    private static boolean isReallyWorldArmorBot(PlayerEntity candidate) {
+        ItemStack helmet = candidate.getInventory().getArmorStack(3);
+        ItemStack chest = candidate.getInventory().getArmorStack(2);
+        ItemStack legs = candidate.getInventory().getArmorStack(1);
+        ItemStack boots = candidate.getInventory().getArmorStack(0);
+
+        return isPlainLeather(helmet, Items.LEATHER_HELMET)
+                || isPlainLeather(chest, Items.LEATHER_CHESTPLATE)
+                || isPlainLeather(legs, Items.LEATHER_LEGGINGS)
+                || isPlainLeather(boots, Items.LEATHER_BOOTS)
+                || isUnenchanted(chest, Items.IRON_CHESTPLATE)
+                || isUnenchanted(legs, Items.IRON_LEGGINGS);
+    }
+
+    private static boolean isPlainLeather(ItemStack stack, Item expectedItem) {
+        if (stack.isEmpty() || stack.getItem() != expectedItem || stack.hasEnchantments()) {
+            return false;
+        }
+
+        Item item = stack.getItem();
+        return !(item instanceof DyeableItem) || !((DyeableItem) item).hasColor(stack);
+    }
+
+    private static boolean isUnenchanted(ItemStack stack, Item expectedItem) {
+        return !stack.isEmpty() && stack.getItem() == expectedItem && !stack.hasEnchantments();
     }
 
     private static boolean isInTabList(MinecraftClient client, AbstractClientPlayerEntity candidate) {
