@@ -1,0 +1,8 @@
+{
+  "key.pvphelper.menu": "Open PvP Helper menu",
+  "key.pvphelper.toggle_aim": "Toggle Aim Assist",
+  "key.pvphelper.toggle_auto": "Toggle AutoAttack",
+  "key.pvphelper.toggle_mode": "Switch attack mode",
+  "key.pvphelper.toggle_antibot": "Toggle AntiBot",
+  "category.pvphelper": "PvP Helper"
+}
